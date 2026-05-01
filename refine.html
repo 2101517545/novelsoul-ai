@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多Agent协作润色 · NovelSoul AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cream: '#FAF9F6', warmwhite: '#FFFFFF',
+            warmgray: { 100: '#F5F0E8', 200: '#E8E4DE', 300: '#D4CFC7', 400: '#B0AAA0', 500: '#6B6560', 600: '#4A4640' },
+            nearblack: '#1A1A1A',
+            caramel: { DEFAULT: '#D4A574', light: '#E8C9A8', dark: '#B8865A' },
+            moss: { DEFAULT: '#7C9A8E', light: '#A3BFB3', dark: '#5A7A6C' },
+          },
+          fontFamily: {
+            serif: ['Playfair Display', 'Noto Serif SC', 'Georgia', 'serif'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            novel: ['Noto Serif SC', 'Georgia', 'serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: #FAF9F6; color: #1A1A1A; overflow-x: hidden; }
+    .nav-blur { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: rgba(250, 249, 246, 0.85); }
+
+    /* ===== Agent通道左边框 ===== */
+    .agent-channel { border-left: 3px solid #E8E4DE; transition: all 0.5s ease; }
+    .agent-channel.active { border-left-color: #7C9A8E; background: rgba(124, 154, 142, 0.04); }
+    .agent-channel.done { border-left-color: #D4A574; background: transparent; }
+
+    /* ===== Agent脉冲 ===== */
+    @keyframes agent-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(124, 154, 142, 0.4); }
+      50% { box-shadow: 0 0 0 6px rgba(124, 154, 142, 0); }
+    }
+    .agent-dot-active {
+      width: 8px; height: 8px; border-radius: 50%; background: #7C9A8E;
+      animation: agent-pulse 1.5s ease infinite;
+    }
+
+    /* ===== 传递箭头动画 ===== */
+    @keyframes arrow-flow {
+      0% { opacity: 0; transform: translateY(-4px); }
+      50% { opacity: 1; }
+      100% { opacity: 0; transform: translateY(4px); }
+    }
+    .arrow-flowing { animation: arrow-flow 1.2s ease infinite; }
+
+    /* ===== 流式打字光标 ===== */
+    @keyframes blink-cursor {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .typing-cursor::after {
+      content: '▍'; color: #7C9A8E; font-weight: 300;
+      animation: blink-cursor 0.8s ease infinite;
+    }
+
+    /* ===== 新增文本高亮 ===== */
+    .text-added { background: rgba(124, 154, 142, 0.12); border-radius: 2px; padding: 0 1px; }
+    /* ===== 删除文本标记 ===== */
+    .text-removed { background: rgba(199, 80, 80, 0.08); color: #C75050; text-decoration: line-through; border-radius: 2px; padding: 0 1px; }
+
+    /* ===== 主编审稿条滑入 ===== */
+    @keyframes slide-up {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .slide-up { animation: slide-up 0.6s ease forwards; }
+
+    /* ===== 审稿项打勾 ===== */
+    @keyframes check-pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      60% { transform: scale(1.2); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .check-pop { animation: check-pop 0.3s ease forwards; }
+
+    /* ===== 完成弹入 ===== */
+    @keyframes pop-in {
+      0% { transform: scale(0.5); opacity: 0; }
+      60% { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .pop-in { animation: pop-in 0.35s ease forwards; }
+
+    /* ===== 滚动条 ===== */
+    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #E8E4DE; border-radius: 2px; }
+
+    /* ===== 按钮 ===== */
+    .btn-primary {
+      background: #1A1A1A; color: white; transition: all 0.3s ease;
+      position: relative; overflow: hidden;
+    }
+    .btn-primary::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, #D4A574, #B8865A);
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .btn-primary:hover::after { opacity: 1; }
+    .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-primary:disabled::after { display: none; }
+    .btn-primary span { position: relative; z-index: 1; }
+
+    .btn-ghost { border: 1.5px solid #E8E4DE; color: #1A1A1A; transition: all 0.3s ease; }
+    .btn-ghost:hover { border-color: #1A1A1A; background: #1A1A1A; color: white; }
+
+    /* ===== 风格选择器 ===== */
+    .style-select {
+      appearance: none; background: #FFFFFF url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236B6560' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center;
+      border: 1.5px solid #E8E4DE; border-radius: 10px; padding: 8px 36px 8px 14px;
+      font-size: 13px; color: #1A1A1A; transition: border-color 0.3s;
+    }
+    .style-select:focus { outline: none; border-color: #D4A574; }
+
+    /* ===== 活跃标签 ===== */
+    @keyframes tag-glow {
+      0%, 100% { background: rgba(124, 154, 142, 0.1); }
+      50% { background: rgba(124, 154, 142, 0.2); }
+    }
+    .active-tag { animation: tag-glow 2s ease infinite; }
+
+    /* ===== 进度条 ===== */
+    .agent-progress {
+      height: 2px; background: #F5F0E8; border-radius: 1px; overflow: hidden;
+    }
+    .agent-progress-bar {
+      height: 100%; background: linear-gradient(90deg, #A3BFB3, #7C9A8E); border-radius: 1px;
+      transition: width 0.3s ease;
+    }
+
+    /* ===== 页面加载 ===== */
+    @keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
+    body { animation: page-in 0.5s ease; }
+
+    /* ===== 移动端面板切换 ===== */
+    @media (max-width: 1023px) {
+      .agent-panel { max-height: none !important; }
+    }
+  </style>
+</head>
+
+<body x-data="refineApp()" x-init="init()">
+
+  <!-- ==================== 导航栏 ==================== -->
+  <nav class="nav-blur fixed top-0 left-0 right-0 z-50 border-b border-warmgray-200/50">
+    <div class="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-nearblack flex items-center justify-center">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 2L12 8L4 14V2Z" fill="white" opacity="0.9"/>
+            <circle cx="4" cy="2" r="1.5" fill="#D4A574"/>
+          </svg>
+        </div>
+        <span class="font-serif font-semibold text-nearblack text-lg tracking-tight">NovelSoul</span>
+      </a>
+      <div class="hidden md:flex items-center gap-8">
+        <a href="diagnose.html" class="text-sm text-warmgray-500 hover:text-nearblack transition-colors">文本诊断</a>
+        <a href="refine.html" class="text-sm text-nearblack font-medium">Agent润色</a>
+        <a href="emotion.html" class="text-sm text-warmgray-500 hover:text-nearblack transition-colors">情感曲线</a>
+        <a href="review.html" class="text-sm text-warmgray-500 hover:text-nearblack transition-colors">对比审稿</a>
+      </div>
+      <a href="diagnose.html" class="btn-primary px-5 py-2 rounded-full text-sm font-medium">
+        <span>开始使用</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ==================== 顶部工具栏 ==================== -->
+  <div class="pt-16 border-b border-warmgray-200 bg-warmwhite/80 backdrop-blur-sm sticky top-16 z-40">
+    <div class="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <a href="diagnose.html" class="text-warmgray-400 hover:text-warmgray-500 transition-colors">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L6 8L10 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <h1 class="font-serif text-base font-semibold text-nearblack">多Agent协作润色</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <select x-model="selectedStyle" class="style-select" :disabled="phase !== 'idle'">
+          <option value="yu_hua">余华 · 冷峻克制</option>
+          <option value="cun_shang">村上春树 · 疏离感</option>
+          <option value="jin_yong">金庸 · 武侠节奏</option>
+          <option value="general">通用文学</option>
+        </select>
+        <button @click="startRefine()" :disabled="phase !== 'idle'"
+          class="btn-primary px-6 py-2 rounded-full text-sm font-medium whitespace-nowrap">
+          <span class="flex items-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <polygon points="4,1 12,7 4,13" fill="currentColor" opacity="0.9"/>
+            </svg>
+            开始润色
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 主面板 ==================== -->
+  <div class="max-w-[1400px] mx-auto px-6 py-6">
+    <div class="flex flex-col lg:flex-row gap-6">
+
+      <!-- ========== 左侧 · Agent状态通道 ========== -->
+      <div class="w-full lg:w-[320px] flex-shrink-0 space-y-0 agent-panel">
+
+        <template x-for="(agent, idx) in agents" :key="idx">
+          <div>
+            <!-- Agent通道卡片 -->
+            <div class="agent-channel bg-warmwhite rounded-xl p-5 transition-all duration-500"
+                 :class="agent.status">
+              <!-- 头部 -->
+              <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-3">
+                  <!-- Agent图标 -->
+                  <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-500"
+                       :class="{
+                         'bg-warmgray-100': agent.status === 'waiting',
+                         'bg-moss/15': agent.status === 'active',
+                         'bg-caramel/10': agent.status === 'done',
+                       }">
+                    <div x-html="agent.icon" class="transition-colors duration-500"
+                         :class="{
+                           'text-warmgray-300': agent.status === 'waiting',
+                           'text-moss': agent.status === 'active',
+                           'text-caramel': agent.status === 'done',
+                         }"></div>
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-semibold text-nearblack" x-text="agent.name"></h4>
+                    <p class="text-[11px] text-warmgray-400 mt-0.5" x-text="agent.role"></p>
+                  </div>
+                </div>
+                <!-- 状态指示 -->
+                <template x-if="agent.status === 'waiting'">
+                  <div class="w-2 h-2 rounded-full bg-warmgray-200 mt-1"></div>
+                </template>
+                <template x-if="agent.status === 'active'">
+                  <div class="agent-dot-active mt-1"></div>
+                </template>
+                <template x-if="agent.status === 'done'">
+                  <div class="pop-in mt-1">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <circle cx="9" cy="9" r="8" fill="#E8F5E9"/>
+                      <path d="M5.5 9L8 11.5L12.5 6.5" stroke="#4CAF50" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </div>
+                </template>
+              </div>
+
+              <!-- 进度条（仅活跃时显示） -->
+              <div class="agent-progress mb-3" x-show="agent.status === 'active'" x-transition>
+                <div class="agent-progress-bar" :style="'width:' + agent.progress + '%'"></div>
+              </div>
+
+              <!-- 中间输出摘要（仅完成时显示） -->
+              <div x-show="agent.status === 'done'" x-transition class="text-xs text-warmgray-500 leading-relaxed bg-warmgray-100/60 rounded-lg p-3">
+                <span x-text="agent.summary"></span>
+              </div>
+
+              <!-- 耗时（仅完成时显示） -->
+              <div x-show="agent.status === 'done'" x-transition class="flex items-center gap-1 mt-2 text-[11px] text-warmgray-400">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1"/>
+                  <path d="M6 3.5V6L7.5 7" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"/>
+                </svg>
+                <span x-text="'耗时 ' + agent.time + 's'"></span>
+              </div>
+            </div>
+
+            <!-- Agent间传递箭头 -->
+            <div x-show="idx < agents.length - 1" class="flex flex-col items-center py-2">
+              <template x-if="agents[idx].status === 'done' && agents[idx + 1].status === 'active'">
+                <div class="flex flex-col items-center arrow-flowing">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M7 2V12M7 12L3 8M7 12L11 8" stroke="#7C9A8E" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="text-[10px] text-moss font-medium mt-1 text-center leading-tight max-w-[160px]" x-text="agents[idx].passMsg"></span>
+                </div>
+              </template>
+              <template x-if="!(agents[idx].status === 'done' && agents[idx + 1].status === 'active')">
+                <div class="flex flex-col items-center opacity-30">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M7 2V12M7 12L3 8M7 12L11 8" stroke="#B0AAA0" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="text-[10px] text-warmgray-300 mt-1">等待传递</span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- 主编Agent（独立卡片） -->
+        <div class="mt-2">
+          <div class="bg-nearblack rounded-xl p-5 text-white transition-all duration-500"
+               :class="editorStatus === 'active' ? 'ring-2 ring-caramel/50' : ''">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M10 2L12.5 7.5L18 8.5L14 12.5L15 18L10 15.5L5 18L6 12.5L2 8.5L7.5 7.5L10 2Z" stroke="#D4A574" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div>
+                <h4 class="text-sm font-semibold">主编Agent</h4>
+                <p class="text-[11px] text-warmgray-400 mt-0.5">终审与统稿</p>
+              </div>
+              <template x-if="editorStatus === 'active'">
+                <div class="ml-auto agent-dot-active" style="background:#D4A574;"></div>
+              </template>
+              <template x-if="editorStatus === 'done'">
+                <div class="ml-auto pop-in">
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <circle cx="9" cy="9" r="8" fill="rgba(212,165,116,0.2)"/>
+                    <path d="M5.5 9L8 11.5L12.5 6.5" stroke="#D4A574" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+              </template>
+            </div>
+
+            <!-- 审稿检查项 -->
+            <div class="space-y-2.5">
+              <template x-for="(check, ci) in editorChecks" :key="ci">
+                <div class="flex items-center gap-2.5">
+                  <template x-if="check.done">
+                    <div class="check-pop flex items-center justify-center w-5 h-5 rounded-full bg-caramel/20">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#D4A574" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </div>
+                  </template>
+                  <template x-if="!check.done">
+                    <div class="w-5 h-5 rounded-full border border-warmgray-600/40"></div>
+                  </template>
+                  <span class="text-xs" :class="check.done ? 'text-warmgray-300' : 'text-warmgray-500'" x-text="check.label"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== 右侧 · 文本工作区 ========== -->
+      <div class="flex-1 min-w-0 space-y-4">
+
+        <!-- 原文区 -->
+        <div class="bg-warmwhite rounded-2xl border border-warmgray-200 overflow-hidden">
+          <div class="px-5 py-3 border-b border-warmgray-200 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="w-2.5 h-2.5 rounded-full bg-warmgray-200"></div>
+              <span class="text-xs font-medium text-warmgray-500">原始文本</span>
+            </div>
+            <span class="text-[11px] text-warmgray-400" x-text="originalText.length + ' 字'"></span>
+          </div>
+          <div class="p-5 max-h-[180px] overflow-y-auto custom-scroll">
+            <p class="font-novel text-sm leading-[2] text-warmgray-400" x-text="originalText"></p>
+          </div>
+        </div>
+
+        <!-- Agent处理输出区 -->
+        <div class="bg-warmwhite rounded-2xl border border-warmgray-200 overflow-hidden" style="min-height:320px;">
+          <!-- 活跃Agent标签 -->
+          <div class="px-5 py-3 border-b border-warmgray-200 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <template x-if="phase === 'idle'">
+                <div class="flex items-center gap-2">
+                  <div class="w-2.5 h-2.5 rounded-full bg-warmgray-200"></div>
+                  <span class="text-xs font-medium text-warmgray-400">等待开始</span>
+                </div>
+              </template>
+              <template x-if="phase === 'refining'">
+                <div class="flex items-center gap-2 active-tag px-2.5 py-1 rounded-full">
+                  <div class="agent-dot-active" style="width:6px;height:6px;"></div>
+                  <span class="text-xs font-medium text-moss-dark" x-text="activeAgentName + ' 正在处理...'"></span>
+                </div>
+              </template>
+              <template x-if="phase === 'editing'">
+                <div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-caramel/10">
+                  <div class="w-1.5 h-1.5 rounded-full bg-caramel animate-pulse"></div>
+                  <span class="text-xs font-medium text-caramel-dark">主编Agent 审稿中</span>
+                </div>
+              </template>
+              <template x-if="phase === 'done'">
+                <div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-moss/10">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#7C9A8E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="text-xs font-medium text-moss-dark">润色完成</span>
+                </div>
+              </template>
+            </div>
+            <template x-if="phase !== 'idle'">
+              <span class="text-[11px] text-warmgray-400" x-text="'阶段 ' + currentStage + ' / 4'"></span>
+            </template>
+          </div>
+
+          <!-- 文本输出区 -->
+          <div class="p-5 min-h-[260px] max-h-[420px] overflow-y-auto custom-scroll">
+            <!-- 空状态 -->
+            <div x-show="phase === 'idle'" class="flex flex-col items-center justify-center h-[240px] text-warmgray-300">
+              <svg width="48" height="48" viewBox="0 0 48 48" fill="none" class="mb-4 opacity-40">
+                <rect x="6" y="8" width="36" height="32" rx="4" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M14 18H34M14 24H28M14 30H22" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+              <p class="text-sm">点击"开始润色"启动多Agent协作</p>
+            </div>
+
+            <!-- 打字输出区 -->
+            <div x-show="phase !== 'idle'">
+              <div class="font-novel text-sm leading-[2.2] text-nearblack" x-html="outputHTML"></div>
+              <!-- 打字光标 -->
+              <span x-show="isTyping" class="typing-cursor"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 最终输出区（完成后显示） -->
+        <div x-show="phase === 'done'" x-transition:enter="transition ease-out duration-500"
+             x-transition:enter-start="opacity-0 translate-y-4"
+             x-transition:enter-end="opacity-100 translate-y-0"
+             class="bg-warmwhite rounded-2xl border-2 border-moss/30 overflow-hidden">
+          <div class="px-5 py-3 border-b border-moss/20 bg-moss/5 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M10 2L12 6.5L8 8.5L12 10.5L10 14" stroke="#5A7A6C" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6 2L4 6.5L8 8.5L4 10.5L6 14" stroke="#5A7A6C" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="text-xs font-semibold text-moss-dark">最终润色稿</span>
+            </div>
+            <button @click="copyFinal()" class="text-[11px] text-moss hover:text-moss-dark transition-colors font-medium flex items-center gap-1">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1"/>
+                <path d="M8 4V2.5C8 1.67 7.33 1 6.5 1H2.5C1.67 1 1 1.67 1 2.5V6.5C1 7.33 1.67 8 2.5 8H4" stroke="currentColor" stroke-width="1"/>
+              </svg>
+              <span x-text="copied ? '已复制' : '复制'"></span>
+            </button>
+          </div>
+          <div class="p-5">
+            <p class="font-novel text-sm leading-[2.2] text-nearblack" x-text="finalText"></p>
+          </div>
+        </div>
+
+        <!-- 完成后操作按钮 -->
+        <div x-show="phase === 'done'" x-transition:enter="transition ease-out duration-500 delay-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             class="flex flex-wrap gap-3">
+          <a href="review.html" class="btn-primary px-6 py-3 rounded-full text-sm font-medium inline-flex items-center gap-2">
+            <span class="flex items-center gap-2">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <rect x="1.5" y="3.5" width="5" height="9" rx="1" stroke="currentColor" stroke-width="1.2"/>
+                <rect x="7.5" y="3.5" width="5" height="9" rx="1" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+              查看对比审稿
+            </span>
+          </a>
+          <a href="emotion.html" class="btn-ghost px-6 py-3 rounded-full text-sm font-medium inline-flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <polyline points="1,10 3.5,6 6,7.5 8.5,3 13,5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+            查看情感曲线
+          </a>
+          <button @click="resetRefine()" class="btn-ghost px-6 py-3 rounded-full text-sm font-medium inline-flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2.5 7C2.5 4.5 4.5 2.5 7 2.5C9 2.5 10.8 3.8 11.3 5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M11.5 7C11.5 9.5 9.5 11.5 7 11.5C5 11.5 3.2 10.2 2.7 8.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              <path d="M9.5 2V5.5H12" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            重新润色
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 底部 ==================== -->
+  <footer class="border-t border-warmgray-200 py-8 mt-8">
+    <div class="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <div class="w-5 h-5 rounded-md bg-nearblack flex items-center justify-center">
+          <svg width="8" height="8" viewBox="0 0 16 16" fill="none"><path d="M4 2L12 8L4 14V2Z" fill="white" opacity="0.9"/></svg>
+        </div>
+        <span class="font-serif font-semibold text-nearblack text-xs">NovelSoul AI</span>
+      </div>
+      <p class="text-[11px] text-warmgray-400">Powered by Multi-Agent AI · Long-Chain Reasoning</p>
+    </div>
+  </footer>
+
+  <!-- ==================== JavaScript ==================== -->
+  <script>
+    function refineApp() {
+      return {
+        phase: 'idle',         // idle | refining | editing | done
+        selectedStyle: 'yu_hua',
+        isTyping: false,
+        outputHTML: '',
+        currentStage: 0,
+        activeAgentName: '',
+        editorStatus: 'waiting', // waiting | active | done
+        copied: false,
+
+        // 原文
+        originalText: '李明走进办公室，看到张伟坐在座位上。李明觉得很生气，因为张伟昨天答应了要交报告但是没有交。李明走到张伟面前说："你昨天说好要交报告的，为什么没交？"张伟觉得很不好意思，他说："对不起，我昨天太忙了忘记了这个事情。"李明说："这不行，你需要今天之内交给我。"张伟说："好的，我今天就交。"然后李明就回到了自己的座位上开始工作。',
+
+        // 最终文本（余华·冷峻模式）
+        finalText: '李明走进办公室的时候，张伟正坐在那里。张伟看着面前的电脑，电脑没有开。\n李明站住了。他手里拿着一个文件夹，手指攥得很紧，像是攥着什么不想放开的东西。\n"报告。"李明说。\n张伟没有动。\n过了很久，也许只有几秒钟，张伟说："今天。"\n李明看了他一会儿，转身走了。',
+
+        // Agent定义
+        agents: [
+          {
+            name: '情感分析师',
+            role: '诊断情感缺失 · 注入感官细节',
+            icon: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 17S3 12.5 3 7.5C3 4.5 5.5 2.5 7.5 2.5C8.8 2.5 9.8 3.2 10 4C10.2 3.2 11.2 2.5 12.5 2.5C14.5 2.5 17 4.5 17 7.5C17 12.5 10 17 10 17Z" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>',
+            status: 'waiting',
+            progress: 0,
+            time: '2.8',
+            summary: '检测到2处情感陈述化问题，已将"觉得很生气""觉得很不好意思"转化为身体动作和环境描写。',
+            passMsg: '传递：情感标注层 + 2处注入位置',
+            // 带标记的中间输出HTML
+            output: '李明推开办公室的门，<span class="text-added">手指无意识地攥紧了文件夹——指节泛白。</span>\n\n张伟坐在座位上，<span class="text-added">盯着电脑屏幕，但屏幕是黑的。</span>\n\n<span class="text-added">李明停下脚步。空气里有种沉闷的东西。</span>\n\n<span class="text-removed">李明觉得很生气，因为张伟昨天答应了要交报告但是没有交。李明走到张伟面前说：</span><span class="text-added">"报告的事。"李明开口时，声音比自己预想的要沉。</span>',
+          },
+          {
+            name: '对话导演',
+            role: '重写对话 · 加入潜台词与沉默',
+            icon: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="4" width="16" height="12" rx="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 8.5H14.5M5.5 11.5H11" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>',
+            status: 'waiting',
+            progress: 0,
+            time: '3.1',
+            summary: '重写了4段对话，加入3处沉默和2处肢体语言暗示。删除所有直接情绪陈述，改为潜台词表达。',
+            passMsg: '传递：对话层 + 潜台词标注 + 节奏预留位',
+            output: '<span class="text-removed">"报告的事。"李明开口时，声音比自己预想的要沉。</span>\n<span class="text-added">"报告。"李明说。</span>\n\n<span class="text-added">张伟没有立刻回头。沉默了大约三秒。</span>\n\n<span class="text-removed">张伟觉得很不好意思，他说："对不起，我昨天太忙了忘记了这个事情。"</span>\n<span class="text-added">"昨天……"张伟移开视线，"我这边出了点状况。"</span>\n\n<span class="text-removed">李明说："这不行，你需要今天之内交给我。"</span>\n<span class="text-added">"出了什么状况。"</span>\n\n<span class="text-removed">张伟说："好的，我今天就交。"</span>\n<span class="text-added">"不是借口。"张伟的手指在桌面上无意识地敲了两下，"今天下班前，肯定给你。"</span>',
+          },
+          {
+            name: '节奏控制师',
+            role: '调整长短句 · 插入留白',
+            icon: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><polyline points="2,15 5,9 8,11.5 12,5 18,8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+            status: 'waiting',
+            progress: 0,
+            time: '2.4',
+            summary: '将平均句长从23字降至11字，插入5处独立短句和3处段落留白。长短句比从3:7调整为5:5。',
+            passMsg: '传递：节奏层 + 留白位置标注',
+            output: '<span class="text-removed">李明推开办公室的门，手指无意识地攥紧了文件夹——指节泛白。</span>\n<span class="text-added">李明推开办公室的门。</span>\n\n<span class="text-added">手指攥紧文件夹。</span>\n<span class="text-added">指节泛白。</span>\n\n<span class="text-removed">张伟坐在座位上，盯着电脑屏幕，但屏幕是黑的。</span>\n<span class="text-added">张伟坐在座位上。</span>\n<span class="text-added">屏幕是黑的。</span>\n\n<span class="text-removed">李明停下脚步。空气里有种沉闷的东西。"报告。"李明说。</span>\n<span class="text-added">"报告。"</span>\n\n<span class="text-removed">张伟没有立刻回头。沉默了大约三秒。</span>\n<span class="text-added">张伟没有回头。</span>\n\n<span class="text-added">三秒。</span>\n\n<span class="text-removed">"昨天……"张伟移开视线，"我这边出了点状况。"</span>\n<span class="text-added">"昨天……"他移开视线。</span>',
+          },
+          {
+            name: '风格润色师',
+            role: '统一文风 · 注入文学质感',
+            icon: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2L12.5 7.5L18 8.5L14 12.5L15 18L10 15.5L5 18L6 12.5L2 8.5L7.5 7.5L10 2Z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+            status: 'waiting',
+            progress: 0,
+            time: '3.5',
+            summary: '应用"余华·冷峻"风格模板：删除所有形容词修饰，使用陈述句和极简动词，关键动作用"像"字句做一次性比喻。',
+            passMsg: '传递：终稿 → 主编Agent审稿',
+            output: '<span class="text-removed">李明推开办公室的门。</span>\n<span class="text-added">李明走进办公室的时候，张伟正坐在那里。</span>\n\n<span class="text-removed">张伟坐在座位上。屏幕是黑的。</span>\n<span class="text-added">张伟看着面前的电脑，电脑没有开。</span>\n\n<span class="text-removed">手指攥紧文件夹。指节泛白。</span>\n<span class="text-added">李明站住了。他手里拿着一个文件夹，手指攥得很紧，像是攥着什么不想放开的东西。</span>\n\n<span class="text-removed">"报告。"</span>\n<span class="text-added">"报告。"李明说。</span>\n\n<span class="text-removed">张伟没有回头。三秒。"昨天……"他移开视线。</span>\n<span class="text-added">张伟没有动。</span>\n\n<span class="text-added">过了很久，也许只有几秒钟，张伟说："今天。"</span>\n\n<span class="text-removed">"出了什么状况。""不是借口。"张伟的手指在桌面上无意识地敲了两下，"今天下班前，肯定给你。"</span>\n<span class="text-added">李明看了他一会儿，转身走了。</span>',
+          },
+        ],
+
+        // 主编审稿检查项
+        editorChecks: [
+          { label: '情感一致性检查', done: false },
+          { label: '对话自然度检查', done: false },
+          { label: '节奏流畅度检查', done: false },
+          { label: '风格统一性检查', done: false },
+        ],
+
+        init() {
+          // 根据风格选择更新最终文本
+          this.updateFinalByStyle();
+        },
+
+        updateFinalByStyle() {
+          const finals = {
+            yu_hua: '李明走进办公室的时候，张伟正坐在那里。张伟看着面前的电脑，电脑没有开。\n李明站住了。他手里拿着一个文件夹，手指攥得很紧，像是攥着什么不想放开的东西。\n"报告。"李明说。\n张伟没有动。\n过了很久，也许只有几秒钟，张伟说："今天。"\n李明看了他一会儿，转身走了。',
+            cun_shang: '推开办公室门的时候，李明注意到张伟还在那个位置上。准确地说，张伟坐在那里，面对着没有打开的电脑屏幕，像是在等什么人先开口。\n李明站在门口，手里捏着的文件夹似乎比平时重了一些。\n"报告的事。"李明说。\n张伟什么也没说。大约过了五秒，或者更久。时间在这种时候总是不太可靠的。\n"今天之内。"张伟终于开口，声音像是从很远的地方传来的。',
+            jin_yong: '李明跨入房中，目光一扫，只见张伟端坐案前，面色如常。只是那面前案上的电脑，却是黑漆漆的，未曾开启。\n李明脚步一顿，手中卷宗捏得极紧，关节处隐隐发白。\n"报告。"只吐出两个字，声音沉郁，似含怒意。\n张伟纹丝不动，恍若未闻。\n过了片刻，张伟缓缓道："今日。"\n李明凝视他半晌，一言不发，转身大步而出。',
+            general: '李明推开门的时候，张伟已经坐在那里了。张伟面前的电脑没开，屏幕像一面黑色的镜子。\n李明在门口停了一下。他的手指攥紧了文件夹，指节发白——他自己也没注意到这个动作。\n"报告。"他说。\n张伟没有转过来。办公室里安静了大概三秒钟。\n"今天。"张伟说。\n李明看了他一会儿。然后转身走了。',
+          };
+          this.finalText = finals[this.selectedStyle] || finals.general;
+        },
+
+        async startRefine() {
+          if (this.phase !== 'idle') return;
+          this.updateFinalByStyle();
+          this.phase = 'refining';
+          this.outputHTML = '';
+
+          // 依次处理4个Agent
+          for (let i = 0; i < this.agents.length; i++) {
+            const agent = this.agents[i];
+            this.currentStage = i + 1;
+            this.activeAgentName = agent.name;
+            agent.status = 'active';
+            agent.progress = 0;
+
+            // 模拟进度条
+            const progressInterval = setInterval(() => {
+              if (agent.progress < 90) {
+                agent.progress += Math.random() * 8 + 2;
+                if (agent.progress > 90) agent.progress = 90;
+              }
+            }, 200);
+
+            // 流式打字输出
+            this.isTyping = true;
+            await this.typeAgentOutput(agent.output);
+
+            clearInterval(progressInterval);
+            agent.progress = 100;
+            this.isTyping = false;
+            agent.status = 'done';
+
+            // Agent间间隔
+            if (i < this.agents.length - 1) {
+              await this.delay(600);
+            }
+          }
+
+          // 进入主编审稿阶段
+          this.phase = 'editing';
+          this.activeAgentName = '';
+          await this.delay(400);
+
+          this.editorStatus = 'active';
+          for (let i = 0; i < this.editorChecks.length; i++) {
+            await this.delay(700);
+            this.editorChecks[i].done = true;
+          }
+          await this.delay(600);
+          this.editorStatus = 'done';
+
+          // 完成
+          await this.delay(400);
+          this.phase = 'done';
+        },
+
+        // 流式打字效果
+        typeAgentOutput(html) {
+          return new Promise((resolve) => {
+            // 在每个Agent输出前加一个阶段分隔
+            const stageLabel = '<div class="text-[11px] text-moss font-medium mb-3 mt-6 first:mt-0 flex items-center gap-1.5"><span class="w-4 h-px bg-moss/40"></span>' + this.activeAgentName + ' 输出<span class="flex-1 h-px bg-moss/40"></span></div>';
+
+            // 将HTML中的\n转为<br>，然后逐字输出
+            const processed = stageLabel + html.replace(/\n/g, '<br>');
+            let charIdx = 0;
+            let inTag = false;
+            let currentOutput = this.outputHTML;
+
+            const typeNext = () => {
+              if (charIdx >= processed.length) {
+                this.outputHTML = currentOutput;
+                resolve();
+                return;
+              }
+
+              const char = processed[charIdx];
+
+              if (char === '<') {
+                // 找到完整标签，一次性加入
+                const closeIdx = processed.indexOf('>', charIdx);
+                if (closeIdx !== -1) {
+                  currentOutput += processed.substring(charIdx, closeIdx + 1);
+                  charIdx = closeIdx + 1;
+                  typeNext();
+                  return;
+                }
+              }
+
+              currentOutput += char;
+              this.outputHTML = currentOutput;
+              charIdx++;
+
+              // 变速：标点符号后稍慢，<br>后稍长停顿
+              let delay = 25;
+              if (char === '，' || char === ',' || char === '。' || char === '。' || char === '！' || char === '？' || char === '…') delay = 120;
+              else if (char === '"' || char === '"' || char === '：') delay = 60;
+              else if (char === 'r' && processed.substring(charIdx - 4, charIdx) === '<br>') delay = 200;
+
+              setTimeout(typeNext, delay);
+            };
+
+            typeNext();
+          });
+        },
+
+        delay(ms) {
+          return new Promise(r => setTimeout(r, ms));
+        },
+
+        copyFinal() {
+          navigator.clipboard.writeText(this.finalText).then(() => {
+            this.copied = true;
+            setTimeout(() => { this.copied = false; }, 2000);
+          });
+        },
+
+        resetRefine() {
+          this.phase = 'idle';
+          this.isTyping = false;
+          this.outputHTML = '';
+          this.currentStage = 0;
+          this.activeAgentName = '';
+          this.editorStatus = 'waiting';
+          this.copied = false;
+          this.agents.forEach(a => {
+            a.status = 'waiting';
+            a.progress = 0;
+          });
+          this.editorChecks.forEach(c => c.done = false);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+      };
+    }
+  </script>
+</body>
+</html>

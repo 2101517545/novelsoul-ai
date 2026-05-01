@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>情感曲线图谱 · NovelSoul AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cream: '#FAF9F6', warmwhite: '#FFFFFF',
+            warmgray: { 100: '#F5F0E8', 200: '#E8E4DE', 300: '#D4CFC7', 400: '#B0AAA0', 500: '#6B6560', 600: '#4A4640' },
+            nearblack: '#1A1A1A',
+            caramel: { DEFAULT: '#D4A574', light: '#E8C9A8', dark: '#B8865A' },
+            moss: { DEFAULT: '#7C9A8E', light: '#A3BFB3', dark: '#5A7A6C' },
+            danger: { light: '#FDE8E8', DEFAULT: '#C75050' },
+            success: { light: '#E8F5E9', DEFAULT: '#4CAF50' },
+          },
+          fontFamily: {
+            serif: ['Playfair Display', 'Noto Serif SC', 'Georgia', 'serif'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            novel: ['Noto Serif SC', 'Georgia', 'serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: #FAF9F6; color: #1A1A1A; overflow-x: hidden; }
+    .nav-blur { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: rgba(250, 249, 246, 0.85); }
+
+    /* ===== 模式切换按钮 ===== */
+    .mode-btn {
+      padding: 6px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
+      transition: all 0.25s ease; cursor: pointer; border: 1.5px solid transparent;
+      color: #6B6560; background: transparent;
+    }
+    .mode-btn:hover { color: #1A1A1A; background: #F5F0E8; }
+    .mode-btn.active {
+      background: #1A1A1A; color: white; border-color: #1A1A1A;
+    }
+
+    /* ===== 自定义Tooltip ===== */
+    .chart-tooltip {
+      position: absolute; pointer-events: none; z-index: 50;
+      background: #FFFFFF; border: 1px solid #E8E4DE; border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.1); padding: 14px 16px;
+      opacity: 0; transition: opacity 0.15s ease, transform 0.15s ease;
+      transform: translateY(4px); min-width: 240px; max-width: 300px;
+    }
+    .chart-tooltip.show { opacity: 1; transform: translateY(0); }
+
+    /* ===== 热力条 ===== */
+    .heat-segment {
+      cursor: pointer; transition: all 0.2s ease; border-radius: 4px;
+      position: relative;
+    }
+    .heat-segment:hover { transform: scaleY(1.3); z-index: 2; }
+    .heat-segment.highlighted { outline: 2px solid #1A1A1A; outline-offset: 1px; transform: scaleY(1.3); }
+
+    /* ===== 热力条Tooltip ===== */
+    .heat-tip {
+      position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      background: #1A1A1A; color: white; font-size: 11px; padding: 4px 10px;
+      border-radius: 6px; white-space: nowrap; opacity: 0; pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+    .heat-tip::after {
+      content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+      border: 4px solid transparent; border-top-color: #1A1A1A;
+    }
+    .heat-segment:hover .heat-tip { opacity: 1; }
+
+    /* ===== 统计卡片 ===== */
+    .stat-card {
+      background: #FFFFFF; border: 1px solid #E8E4DE; border-radius: 16px;
+      padding: 20px; transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.06); }
+
+    /* ===== 按钮 ===== */
+    .btn-primary {
+      background: #1A1A1A; color: white; transition: all 0.3s ease;
+      position: relative; overflow: hidden;
+    }
+    .btn-primary::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, #D4A574, #B8865A);
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .btn-primary:hover::after { opacity: 1; }
+    .btn-primary span { position: relative; z-index: 1; }
+
+    .btn-ghost { border: 1.5px solid #E8E4DE; color: #1A1A1A; transition: all 0.3s ease; }
+    .btn-ghost:hover { border-color: #1A1A1A; background: #1A1A1A; color: white; }
+
+    /* ===== 滚动条 ===== */
+    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #E8E4DE; border-radius: 2px; }
+
+    /* ===== 淡入 ===== */
+    .fade-up { opacity: 0; transform: translateY(30px); transition: opacity 0.7s ease, transform 0.7s ease; }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+
+    /* ===== 页面加载 ===== */
+    @keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
+    body { animation: page-in 0.5s ease; }
+
+    /* ===== 图例色块 ===== */
+    .legend-line { width: 20px; height: 3px; border-radius: 2px; }
+    .legend-line.dashed { background: repeating-linear-gradient(90deg, #B0AAA0 0 4px, transparent 4px 8px); }
+  </style>
+</head>
+
+<body x-data="emotionApp()" x-init="init()">
+
+  <!-- ==================== 导航栏 ==================== -->
+  <nav class="nav-blur fixed top-0 left-0 right-0 z-50 border-b border-warmgray-200/50">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-nearblack flex items-center justify-center">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 2L12 8L4 14V2Z" fill="white" opacity="0.9"/>
+            <circle cx="4" cy="2" r="1.5" fill="#D4A574"/>
+          </svg>
+        </div>
+        <span class="font-serif font-semibold text-nearblack text-lg tracking-tight">NovelSoul</span>
+      </a>
+      <div class="hidden md:flex items-center gap-8">
+        <a href="diagnose.html" class="text-sm text-warmgray-500 hover:text-nearblack transition-colors">文本诊断</a>
+        <a href="refine.html" class="text-sm text-warmgray-500 hover:text-nearblack transition-colors">Agent润色</a>
+        <a href="emotion.html" class="text-sm text-nearblack font-medium">情感曲线</a>
+        <a href="review.html" class="text-sm text-warmgray-500 hover:text-nearblack transition-colors">对比审稿</a>
+      </div>
+      <a href="diagnose.html" class="btn-primary px-5 py-2 rounded-full text-sm font-medium">
+        <span>开始使用</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ==================== 主内容 ==================== -->
+  <main class="pt-16 min-h-screen">
+    <div class="max-w-6xl mx-auto px-6 pt-12 pb-8">
+      <!-- 面包屑 -->
+      <a href="index.html" class="inline-flex items-center gap-1.5 text-xs text-warmgray-400 hover:text-warmgray-500 transition-colors mb-6">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7L9 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        返回首页
+      </a>
+      <h1 class="font-serif text-3xl md:text-4xl font-bold text-nearblack mb-3">情感曲线图谱</h1>
+      <p class="text-warmgray-500 text-base mb-8">看到文本的呼吸感——润色前后的情感波动对比</p>
+
+      <!-- 控制栏 -->
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <div class="flex items-center gap-1.5 bg-warmgray-100 rounded-xl p-1">
+          <button @click="setMode('before')" class="mode-btn" :class="mode === 'before' ? 'active' : ''">润色前</button>
+          <button @click="setMode('after')" class="mode-btn" :class="mode === 'after' ? 'active' : ''">润色后</button>
+          <button @click="setMode('compare')" class="mode-btn" :class="mode === 'compare' ? 'active' : ''">对比模式</button>
+        </div>
+        <!-- 图例 -->
+        <div class="flex items-center gap-5 text-xs text-warmgray-500">
+          <div class="flex items-center gap-2" x-show="mode !== 'after'">
+            <div class="legend-line dashed"></div>
+            <span>润色前</span>
+          </div>
+          <div class="flex items-center gap-2" x-show="mode !== 'before'">
+            <div class="legend-line" style="background:#D4A574;"></div>
+            <span>润色后</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="w-5 h-0 border-t border-dashed border-warmgray-400"></div>
+            <span>健康基线</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 主图表区 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 mb-8">
+      <div class="bg-warmwhite rounded-2xl border border-warmgray-200 p-5 md:p-8 relative" style="min-height:380px;">
+        <!-- Tooltip容器 -->
+        <div class="chart-tooltip" :class="{ show: tooltip.show }"
+             :style="'left:' + tooltip.x + 'px;top:' + tooltip.y + 'px;'">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[11px] font-medium text-warmgray-400" x-text="'第 ' + tooltip.segment + ' 段'"></span>
+            <span class="text-lg font-bold" :class="tooltip.value >= 50 ? 'text-caramel-dark' : 'text-warmgray-500'" x-text="tooltip.value + '%'"></span>
+          </div>
+          <p class="font-novel text-xs leading-relaxed text-warmgray-600 mb-2" x-text="tooltip.text"></p>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                  :class="{
+                    'bg-danger-light text-danger': tooltip.value < 35,
+                    'bg-warmgray-100 text-warmgray-500': tooltip.value >= 35 && tooltip.value < 55,
+                    'bg-caramel/10 text-caramel-dark': tooltip.value >= 55 && tooltip.value < 75,
+                    'bg-moss/10 text-moss-dark': tooltip.value >= 75,
+                  }" x-text="tooltip.label"></span>
+            <span class="text-[10px] text-warmgray-300" x-text="tooltip.source"></span>
+          </div>
+        </div>
+
+        <canvas x-ref="emotionChart"></canvas>
+      </div>
+    </div>
+
+    <!-- ==================== 段落情感热力条 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 mb-10 fade-up">
+      <h3 class="text-sm font-semibold text-nearblack mb-5 flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="4" width="3" height="8" rx="1" fill="#E8E4DE"/>
+          <rect x="5.5" y="2" width="3" height="10" rx="1" fill="#D4CFC7"/>
+          <rect x="10" y="6" width="3" height="6" rx="1" fill="#D4A574"/>
+        </svg>
+        段落情感热力图
+        <span class="text-xs text-warmgray-400 font-normal ml-1">点击色块定位到图表</span>
+      </h3>
+
+      <div class="space-y-3">
+        <!-- 润色前热力条 -->
+        <div class="flex items-center gap-3" x-show="mode !== 'after'">
+          <span class="text-[11px] text-warmgray-400 w-12 flex-shrink-0">润色前</span>
+          <div class="flex-1 flex gap-1 h-8 items-end">
+            <template x-for="(val, i) in beforeValues" :key="'b'+i">
+              <div class="heat-segment flex-1"
+                   :class="{ highlighted: highlightedIndex === i }"
+                   :style="'height:' + Math.max(val, 8) + '%;background:' + getHeatColor(val)"
+                   @click="onHeatClick(i, 'before')">
+                <div class="heat-tip" x-text="val + '%'"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 润色后热力条 -->
+        <div class="flex items-center gap-3" x-show="mode !== 'before'">
+          <span class="text-[11px] text-warmgray-400 w-12 flex-shrink-0">润色后</span>
+          <div class="flex-1 flex gap-1 h-8 items-end">
+            <template x-for="(val, i) in afterValues" :key="'a'+i">
+              <div class="heat-segment flex-1"
+                   :class="{ highlighted: highlightedIndex === i }"
+                   :style="'height:' + Math.max(val, 8) + '%;background:' + getHeatColor(val)"
+                   @click="onHeatClick(i, 'after')">
+                <div class="heat-tip" x-text="val + '%'"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- 色阶图例 -->
+        <div class="flex items-center gap-3 pl-15">
+          <span class="w-12 flex-shrink-0"></span>
+          <div class="flex items-center gap-2 text-[10px] text-warmgray-400">
+            <span>平淡 0</span>
+            <div class="flex gap-px">
+              <div class="w-6 h-2.5 rounded-sm" style="background:#E8E4DE"></div>
+              <div class="w-6 h-2.5 rounded-sm" style="background:#D4CFC7"></div>
+              <div class="w-6 h-2.5 rounded-sm" style="background:#DDD0C0"></div>
+              <div class="w-6 h-2.5 rounded-sm" style="background:#D4A574"></div>
+              <div class="w-6 h-2.5 rounded-sm" style="background:#C4956A"></div>
+              <div class="w-6 h-2.5 rounded-sm" style="background:#B8865A"></div>
+            </div>
+            <span>强烈 100</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 情感统计摘要 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 mb-10 fade-up">
+      <h3 class="text-sm font-semibold text-nearblack mb-5 flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M2 12L5 8L8 10L11 4L14 6" stroke="#D4A574" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        润色效果量化
+      </h3>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- 情感振幅 -->
+        <div class="stat-card">
+          <p class="text-xs text-warmgray-400 mb-3">情感振幅</p>
+          <div class="flex items-end gap-1 mb-2">
+            <span class="text-2xl font-bold text-warmgray-400" x-text="displayStats.amplitudeBefore"></span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-warmgray-300 mb-1">
+              <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="text-2xl font-bold text-nearblack" x-text="displayStats.amplitudeAfter"></span>
+          </div>
+          <div class="flex items-center gap-1 text-xs">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 8L4.5 4L7 6L10 2" stroke="#4CAF50" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="text-success font-medium" x-text="'↑ ' + displayStats.amplitudeChange + '%'"></span>
+          </div>
+        </div>
+
+        <!-- 高峰次数 -->
+        <div class="stat-card">
+          <p class="text-xs text-warmgray-400 mb-3">情感高峰次数</p>
+          <div class="flex items-end gap-1 mb-2">
+            <span class="text-2xl font-bold text-warmgray-400" x-text="displayStats.peaksBefore"></span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-warmgray-300 mb-1">
+              <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="text-2xl font-bold text-nearblack" x-text="displayStats.peaksAfter"></span>
+          </div>
+          <div class="flex items-center gap-1 text-xs">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 8L4.5 4L7 6L10 2" stroke="#4CAF50" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="text-success font-medium" x-text="'+ ' + displayStats.peaksAfter + ' 次'"></span>
+          </div>
+        </div>
+
+        <!-- 平淡段落比 -->
+        <div class="stat-card">
+          <p class="text-xs text-warmgray-400 mb-3">平淡段落占比</p>
+          <div class="flex items-end gap-1 mb-2">
+            <span class="text-2xl font-bold text-danger" x-text="displayStats.flatBefore + '%'"></span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-warmgray-300 mb-1">
+              <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="text-2xl font-bold text-success" x-text="displayStats.flatAfter + '%'"></span>
+          </div>
+          <div class="flex items-center gap-1 text-xs">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 8L4.5 4L7 6L10 2" stroke="#4CAF50" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="text-success font-medium" x-text="'↓ ' + displayStats.flatChange + '%'"></span>
+          </div>
+        </div>
+
+        <!-- 平均情感密度 -->
+        <div class="stat-card">
+          <p class="text-xs text-warmgray-400 mb-3">平均情感密度</p>
+          <div class="flex items-end gap-1 mb-2">
+            <span class="text-2xl font-bold text-warmgray-400" x-text="displayStats.densityBefore"></span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-warmgray-300 mb-1">
+              <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="text-2xl font-bold text-nearblack" x-text="displayStats.densityAfter"></span>
+          </div>
+          <div class="flex items-center gap-1 text-xs">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 8L4.5 4L7 6L10 2" stroke="#4CAF50" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="text-success font-medium" x-text="'↑ ' + displayStats.densityChange + '%'"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 段落文本对照 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 mb-10 fade-up">
+      <h3 class="text-sm font-semibold text-nearblack mb-5 flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <rect x="1.5" y="3.5" width="5.5" height="9" rx="1.5" stroke="#1A1A1A" stroke-width="1.2"/>
+          <rect x="9" y="3.5" width="5.5" height="9" rx="1.5" stroke="#1A1A1A" stroke-width="1.2"/>
+        </svg>
+        段落情感详情
+      </h3>
+
+      <div class="space-y-2">
+        <template x-for="(item, i) in segmentDetails" :key="i">
+          <div class="bg-warmwhite rounded-xl border border-warmgray-200 p-4 md:p-5 transition-all duration-300 hover:shadow-sm"
+               :class="{ 'border-caramel/40 ring-1 ring-caramel/10': highlightedIndex === i }">
+            <div class="flex flex-col sm:flex-row gap-4">
+              <!-- 润色前 -->
+              <div class="flex-1 min-w-0" x-show="mode !== 'after'">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-[11px] text-warmgray-400">润色前 · 第<span x-text="i+1"></span>段</span>
+                  <span class="text-xs font-bold text-warmgray-400" x-text="item.beforeVal + '%'"></span>
+                </div>
+                <p class="font-novel text-xs leading-relaxed text-warmgray-500" x-text="item.beforeText"></p>
+              </div>
+              <!-- 润色后 -->
+              <div class="flex-1 min-w-0" x-show="mode !== 'before'">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-[11px] text-warmgray-400">润色后 · 第<span x-text="i+1"></span>段</span>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-bold" :class="item.afterVal >= 50 ? 'text-caramel-dark' : 'text-warmgray-500'" x-text="item.afterVal + '%'"></span>
+                    <template x-if="item.afterVal - item.beforeVal > 10">
+                      <span class="text-[10px] text-success font-medium px-1.5 py-0.5 rounded bg-success-light">↑<span x-text="(item.afterVal - item.beforeVal)"></span></span>
+                    </template>
+                    <template x-if="item.beforeVal - item.afterVal > 10">
+                      <span class="text-[10px] text-danger font-medium px-1.5 py-0.5 rounded bg-danger-light">↓<span x-text="(item.beforeVal - item.afterVal)"></span></span>
+                    </template>
+                  </div>
+                </div>
+                <p class="font-novel text-xs leading-relaxed text-nearblack" x-text="item.afterText"></p>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- ==================== 行动按钮 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 pb-20 fade-up">
+      <div class="flex flex-wrap gap-4 justify-center">
+        <a href="refine.html" class="btn-primary px-7 py-3 rounded-full text-sm font-medium inline-flex items-center gap-2">
+          <span class="flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1.5" y="1.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="7.5" y="1.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="1.5" y="7.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="7.5" y="7.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+            </svg>
+            返回Agent润色
+          </span>
+        </a>
+        <a href="review.html" class="btn-ghost px-7 py-3 rounded-full text-sm font-medium inline-flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="1" y="3" width="5.5" height="8.5" rx="1.2" stroke="currentColor" stroke-width="1.2"/>
+            <rect x="7.5" y="3" width="5.5" height="8.5" rx="1.2" stroke="currentColor" stroke-width="1.2"/>
+          </svg>
+          查看对比审稿
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== 底部 ==================== -->
+  <footer class="border-t border-warmgray-200 py-8">
+    <div class="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <div class="w-5 h-5 rounded-md bg-nearblack flex items-center justify-center">
+          <svg width="8" height="8" viewBox="0 0 16 16" fill="none"><path d="M4 2L12 8L4 14V2Z" fill="white" opacity="0.9"/></svg>
+        </div>
+        <span class="font-serif font-semibold text-nearblack text-xs">NovelSoul AI</span>
+      </div>
+      <p class="text-[11px] text-warmgray-400">Powered by Multi-Agent AI · Long-Chain Reasoning</p>
+    </div>
+  </footer>
+
+  <!-- ==================== JavaScript ==================== -->
+  <script>
+    function emotionApp() {
+      return {
+        mode: 'compare',
+        chart: null,
+        highlightedIndex: -1,
+        statsAnimated: false,
+
+        // Tooltip状态
+        tooltip: { show: false, x: 0, y: 0, segment: 0, value: 0, text: '', label: '', source: '' },
+
+        // 段落标签
+        labels: ['段1', '段2', '段3', '段4', '段5', '段6', '段7', '段8'],
+
+        // 润色前情感值
+        beforeValues: [30, 42, 45, 38, 40, 32, 28, 25],
+
+        // 润色后情感值
+        afterValues: [35, 22, 78, 85, 18, 72, 55, 20],
+
+        // 润色前文本
+        beforeTexts: [
+          '李明走进办公室，看到张伟坐在座位上。',
+          '李明觉得很生气，因为张伟昨天答应了要交报告但是没有交。',
+          '李明走到张伟面前说："你昨天说好要交报告的，为什么没交？"',
+          '张伟觉得很不好意思，他说："对不起，我昨天太忙了忘记了这个事情。"',
+          '李明说："这不行，你需要今天之内交给我。"',
+          '张伟说："好的，我今天就交。"',
+          '然后李明就回到了自己的座位上开始工作。',
+          '（结尾）',
+        ],
+
+        // 润色后文本
+        afterTexts: [
+          '李明走进办公室的时候，张伟正坐在那里。',
+          '张伟看着面前的电脑，电脑没有开。',
+          '李明站住了。手指攥得很紧，像是攥着什么不想放开的东西。',
+          '"报告。"李明说。',
+          '张伟没有动。',
+          '过了很久，也许只有几秒钟，张伟说："今天。"',
+          '李明看了他一会儿。',
+          '转身走了。',
+        ],
+
+        // 情感标签映射
+        emotionLabels: {
+          low: ['平淡', '低沉', '沉闷', '压抑', '死寂', '空洞', '灰暗', '收束'],
+          mid: ['微澜', '平稳', '酝酿', '缓冲', '过渡', '沉淀'],
+          high: ['紧张', '积聚', '爆发', '尖锐', '冲突'],
+          peak: ['情感高峰', '爆发点', '高潮', '顶点'],
+        },
+
+        // 统计显示值（动画用）
+        displayStats: {
+          amplitudeBefore: 0, amplitudeAfter: 0, amplitudeChange: 0,
+          peaksBefore: 0, peaksAfter: 0,
+          flatBefore: 0, flatAfter: 0, flatChange: 0,
+          densityBefore: '0.0', densityAfter: '0.0', densityChange: 0,
+        },
+
+        // 统计目标值
+        targetStats: {
+          amplitudeBefore: 12, amplitudeAfter: 65, amplitudeChange: 442,
+          peaksBefore: 0, peaksAfter: 3,
+          flatBefore: 87, flatAfter: 13, flatChange: 74,
+          densityBefore: 0.3, densityAfter: 0.8, densityChange: 167,
+        },
+
+        // 段落详情
+        get segmentDetails() {
+          return this.labels.map((_, i) => ({
+            beforeVal: this.beforeValues[i],
+            afterVal: this.afterValues[i],
+            beforeText: this.beforeTexts[i],
+            afterText: this.afterTexts[i],
+          }));
+        },
+
+        init() {
+          this.$nextTick(() => {
+            this.createChart();
+            // 滚动渐入
+            const obs = new IntersectionObserver((entries) => {
+              entries.forEach(e => {
+                if (e.isIntersecting) {
+                  e.target.classList.add('visible');
+                  if (!this.statsAnimated && e.target.querySelector('.stat-card')) {
+                    this.statsAnimated = true;
+                    this.animateStats();
+                  }
+                }
+              });
+            }, { threshold: 0.15 });
+            document.querySelectorAll('.fade-up').forEach(el => obs.observe(el));
+          });
+        },
+
+        createChart() {
+          const canvas = this.$refs.emotionChart;
+          const ctx = canvas.getContext('2d');
+
+          // 创建渐变填充
+          const gradientAfter = ctx.createLinearGradient(0, 0, 0, canvas.parentElement.clientHeight || 350);
+          gradientAfter.addColorStop(0, 'rgba(212, 165, 116, 0.2)');
+          gradientAfter.addColorStop(1, 'rgba(212, 165, 116, 0.02)');
+
+          const gradientBefore = ctx.createLinearGradient(0, 0, 0, canvas.parentElement.clientHeight || 350);
+          gradientBefore.addColorStop(0, 'rgba(176, 170, 160, 0.06)');
+          gradientBefore.addColorStop(1, 'rgba(176, 170, 160, 0.01)');
+
+          const self = this;
+
+          // 自定义插件：基线 + 区域标注 + 悬浮竖线
+          const customPlugin = {
+            id: 'emotionZones',
+            afterDraw(chart) {
+              const ctx2 = chart.ctx;
+              const xScale = chart.scales.x;
+              const yScale = chart.scales.y;
+              const chartArea = chart.chartArea;
+
+              // 健康基线 y=50
+              const baseY = yScale.getPixelForValue(50);
+              ctx2.save();
+              ctx2.setLineDash([6, 4]);
+              ctx2.strokeStyle = 'rgba(107, 101, 96, 0.25)';
+              ctx2.lineWidth = 1;
+              ctx2.beginPath();
+              ctx2.moveTo(chartArea.left, baseY);
+              ctx2.lineTo(chartArea.right, baseY);
+              ctx2.stroke();
+              ctx2.restore();
+
+              // 基线标签
+              ctx2.save();
+              ctx2.font = '10px Inter, sans-serif';
+              ctx2.fillStyle = 'rgba(107, 101, 96, 0.4)';
+              ctx2.textAlign = 'right';
+              ctx2.fillText('健康基线', chartArea.right - 4, baseY - 6);
+              ctx2.restore();
+
+              // 区域标注（仅在对比模式下）
+              const afterDataset = chart.data.datasets[1];
+              if (!afterDataset.hidden) {
+                ctx2.save();
+
+                // 平淡区标注：index 1(22), index 4(18), index 7(20)
+                const flatZones = [
+                  { index: 1, label: '沉默' },
+                  { index: 4, label: '僵持' },
+                  { index: 7, label: '收束' },
+                ];
+                flatZones.forEach(zone => {
+                  const x = xScale.getPixelForValue(zone.index);
+                  const w = xScale.getPixelForValue(1) - xScale.getPixelForValue(0);
+                  ctx2.fillStyle = 'rgba(199, 80, 80, 0.05)';
+                  ctx2.fillRect(x - w * 0.4, chartArea.top, w * 0.8, chartArea.bottom - chartArea.top);
+                  // 标签
+                  ctx2.font = '9px Inter, sans-serif';
+                  ctx2.fillStyle = 'rgba(199, 80, 80, 0.5)';
+                  ctx2.textAlign = 'center';
+                  ctx2.fillText(zone.label, x, chartArea.top + 14);
+                });
+
+                // 高峰区标注：index 2(78), index 3(85), index 5(72)
+                const peakZones = [
+                  { index: 2, label: '积聚' },
+                  { index: 3, label: '爆发' },
+                  { index: 5, label: '回应' },
+                ];
+                peakZones.forEach(zone => {
+                  const x = xScale.getPixelForValue(zone.index);
+                  const val = afterDataset.data[zone.index];
+                  const y = yScale.getPixelForValue(val);
+                  const w = xScale.getPixelForValue(1) - xScale.getPixelForValue(0);
+                  // 高峰区背景
+                  ctx2.fillStyle = 'rgba(124, 154, 142, 0.06)';
+                  ctx2.fillRect(x - w * 0.4, y, w * 0.8, chartArea.bottom - y);
+                  // 标签
+                  ctx2.font = '9px Inter, sans-serif';
+                  ctx2.fillStyle = 'rgba(124, 154, 142, 0.6)';
+                  ctx2.textAlign = 'center';
+                  ctx2.fillText(zone.label, x, y - 10);
+                  // 向上箭头
+                  ctx2.beginPath();
+                  ctx2.moveTo(x, y - 4);
+                  ctx2.lineTo(x - 3, y);
+                  ctx2.lineTo(x + 3, y);
+                  ctx2.closePath();
+                  ctx2.fill();
+                });
+
+                ctx2.restore();
+              }
+            },
+          };
+
+          // 悬浮竖线插件
+          const hoverLinePlugin = {
+            id: 'hoverLine',
+            afterDraw(chart) {
+              if (chart.tooltip && chart.tooltip._active && chart.tooltip._active.length) {
+                const x = chart.tooltip._active[0].element.x;
+                const ctx2 = chart.ctx;
+                const chartArea = chart.chartArea;
+                ctx2.save();
+                ctx2.setLineDash([3, 3]);
+                ctx2.strokeStyle = 'rgba(26, 26, 26, 0.12)';
+                ctx2.lineWidth = 1;
+                ctx2.beginPath();
+                ctx2.moveTo(x, chartArea.top);
+                ctx2.lineTo(x, chartArea.bottom);
+                ctx2.stroke();
+                ctx2.restore();
+              }
+            },
+          };
+
+          this.chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: this.labels,
+              datasets: [
+                {
+                  label: '润色前',
+                  data: this.beforeValues,
+                  borderColor: '#B0AAA0',
+                  borderWidth: 2,
+                  borderDash: [6, 4],
+                  backgroundColor: gradientBefore,
+                  fill: true,
+                  tension: 0.35,
+                  pointRadius: 4,
+                  pointHoverRadius: 7,
+                  pointBackgroundColor: '#FFFFFF',
+                  pointBorderColor: '#B0AAA0',
+                  pointBorderWidth: 2,
+                  pointHoverBackgroundColor: '#FFFFFF',
+                  pointHoverBorderColor: '#B0AAA0',
+                  pointHoverBorderWidth: 2.5,
+                  hidden: false,
+                  order: 2,
+                },
+                {
+                  label: '润色后',
+                  data: this.afterValues,
+                  borderColor: '#D4A574',
+                  borderWidth: 2.5,
+                  backgroundColor: gradientAfter,
+                  fill: true,
+                  tension: 0.35,
+                  pointRadius: 5,
+                  pointHoverRadius: 8,
+                  pointBackgroundColor: '#FFFFFF',
+                  pointBorderColor: '#D4A574',
+                  pointBorderWidth: 2.5,
+                  pointHoverBackgroundColor: '#FFFFFF',
+                  pointHoverBorderColor: '#B8865A',
+                  pointHoverBorderWidth: 3,
+                  hidden: false,
+                  order: 1,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              animation: { duration: 1500, easing: 'easeOutQuart' },
+              layout: { padding: { top: 20, right: 10, bottom: 5, left: 5 } },
+              scales: {
+                x: {
+                  grid: { display: false },
+                  ticks: { font: { size: 11, family: 'Inter' }, color: '#B0AAA0', padding: 8 },
+                  border: { display: false },
+                },
+                y: {
+                  min: 0, max: 100,
+                  grid: { color: 'rgba(232, 228, 222, 0.5)', drawBorder: false },
+                  ticks: {
+                    font: { size: 11, family: 'Inter' }, color: '#B0AAA0', padding: 12,
+                    callback: v => v + '%', stepSize: 25,
+                  },
+                  border: { display: false },
+                },
+              },
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  enabled: false,
+                  external: function(context) {
+                    const tooltipModel = context.tooltip;
+                    if (!tooltipModel || !tooltipModel.dataPoints || tooltipModel.dataPoints.length === 0) {
+                      self.tooltip.show = false;
+                      return;
+                    }
+
+                    const dp = tooltipModel.dataPoints[0];
+                    const idx = dp.dataIndex;
+                    const dsIdx = dp.datasetIndex;
+                    const val = dp.raw;
+                    const text = dsIdx === 0 ? self.beforeTexts[idx] : self.afterTexts[idx];
+                    const source = dsIdx === 0 ? '润色前' : '润色后';
+
+                    // 确定情感标签
+                    let label = '';
+                    if (val < 25) label = self.emotionLabels.low[idx] || '平淡';
+                    else if (val < 40) label = self.emotionLabels.low[idx] || '低沉';
+                    else if (val < 55) label = self.emotionLabels.mid[idx] || '平稳';
+                    else if (val < 75) label = self.emotionLabels.high[idx] || '紧张';
+                    else label = self.emotionLabels.peak[idx] || '情感高峰';
+
+                    self.tooltip = {
+                      show: true,
+                      x: tooltipModel.caretX,
+                      y: tooltipModel.caretY,
+                      segment: idx + 1,
+                      value: val,
+                      text: text.length > 50 ? text.substring(0, 50) + '…' : text,
+                      label: label,
+                      source: source,
+                    };
+
+                    // 高亮对应热力条
+                    self.highlightedIndex = idx;
+                  },
+                },
+              },
+              onHover: (event, elements) => {
+                event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+              },
+            },
+            plugins: [customPlugin, hoverLinePlugin],
+          });
+
+          // 鼠标离开时清除高亮
+          canvas.addEventListener('mouseleave', () => {
+            this.tooltip.show = false;
+            this.highlightedIndex = -1;
+          });
+        },
+
+        setMode(m) {
+          this.mode = m;
+          if (!this.chart) return;
+          const ds = this.chart.data.datasets;
+          ds[0].hidden = (m === 'after');
+          ds[1].hidden = (m === 'before');
+          this.chart.update('active');
+        },
+
+        onHeatClick(index, source) {
+          this.highlightedIndex = index;
+          if (!this.chart) return;
+
+          // 确定使用哪个dataset
+          let dsIdx = 1;
+          if (source === 'before' && this.mode !== 'after') dsIdx = 0;
+          if (source === 'after' && this.mode !== 'before') dsIdx = 1;
+          if (this.mode === 'before') dsIdx = 0;
+          if (this.mode === 'after') dsIdx = 1;
+
+          // 高亮数据点
+          this.chart.setActiveElements([{ datasetIndex: dsIdx, index: index }]);
+          this.chart.tooltip.setActiveElements([{ datasetIndex: dsIdx, index: index }], { x: 0, y: 0 });
+          this.chart.update();
+
+          // 手动触发tooltip
+          const val = dsIdx === 0 ? this.beforeValues[index] : this.afterValues[index];
+          const text = dsIdx === 0 ? this.beforeTexts[index] : this.afterTexts[index];
+          const src = dsIdx === 0 ? '润色前' : '润色后';
+
+          let label = '';
+          if (val < 25) label = this.emotionLabels.low[index] || '平淡';
+          else if (val < 40) label = this.emotionLabels.low[index] || '低沉';
+          else if (val < 55) label = this.emotionLabels.mid[index] || '平稳';
+          else if (val < 75) label = this.emotionLabels.high[index] || '紧张';
+          else label = this.emotionLabels.peak[index] || '情感高峰';
+
+          // 计算像素位置
+          const meta = this.chart.getDatasetMeta(dsIdx);
+          const point = meta.data[index];
+          const canvasRect = this.$refs.emotionChart.getBoundingClientRect();
+          const containerRect = this.$refs.emotionChart.parentElement.getBoundingClientRect();
+
+          this.tooltip = {
+            show: true,
+            x: point.x,
+            y: point.y - 20,
+            segment: index + 1,
+            value: val,
+            text: text.length > 50 ? text.substring(0, 50) + '…' : text,
+            label: label,
+            source: src,
+          };
+        },
+
+        getHeatColor(value) {
+          // 0-25: 灰色系  25-50: 暖灰过渡  50-75: 焦糖  75-100: 深焦糖
+          if (value < 15) return '#E8E4DE';
+          if (value < 30) return '#DDD6CC';
+          if (value < 45) return '#D4CFC7';
+          if (value < 55) return '#CCBEAD';
+          if (value < 65) return '#D4A574';
+          if (value < 75) return '#C99A65';
+          if (value < 85) return '#C08F5A';
+          return '#B8865A';
+        },
+
+        animateStats() {
+          const target = this.targetStats;
+          const duration = 1500;
+          const startTime = performance.now();
+
+          const count = (now) => {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const ease = 1 - Math.pow(1 - progress, 3);
+
+            this.displayStats = {
+              amplitudeBefore: Math.round(target.amplitudeBefore * ease),
+              amplitudeAfter: Math.round(target.amplitudeAfter * ease),
+              amplitudeChange: Math.round(target.amplitudeChange * ease),
+              peaksBefore: Math.round(target.peaksBefore * ease),
+              peaksAfter: Math.round(target.peaksAfter * ease),
+              flatBefore: Math.round(target.flatBefore * ease),
+              flatAfter: Math.round(target.flatAfter * ease),
+              flatChange: Math.round(target.flatChange * ease),
+              densityBefore: (target.densityBefore * ease).toFixed(1),
+              densityAfter: (target.densityAfter * ease).toFixed(1),
+              densityChange: Math.round(target.densityChange * ease),
+            };
+
+            if (progress < 1) requestAnimationFrame(count);
+          };
+
+          requestAnimationFrame(count);
+        },
+      };
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>对比审稿台 · NovelSoul AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cream: '#FAF9F6', warmwhite: '#FFFFFF',
+            warmgray: { 100: '#F5F0E8', 200: '#E8E4DE', 300: '#D4CFC7', 400: '#B0AAA0', 500: '#6B6560', 600: '#4A4640' },
+            nearblack: '#1A1A1A',
+            caramel: { DEFAULT: '#D4A574', light: '#E8C9A8', dark: '#B8865A' },
+            moss: { DEFAULT: '#7C9A8E', light: '#A3BFB3', dark: '#5A7A6C' },
+            danger: { light: '#FDE8E8', DEFAULT: '#C75050' },
+            success: { light: '#E8F5E9', DEFAULT: '#4CAF50' },
+            rhythm: { DEFAULT: '#6B8FB5', light: '#E3EDF5' },
+            style_p: { DEFAULT: '#9B8EC4', light: '#EDE8F5' },
+          },
+          fontFamily: {
+            serif: ['Playfair Display', 'Noto Serif SC', 'Georgia', 'serif'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            novel: ['Noto Serif SC', 'Georgia', 'serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: #FAF9F6; color: #1A1A1A; overflow-x: hidden; }
+    .nav-blur { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: rgba(250, 249, 246, 0.85); }
+
+    /* ===== 修改标记 ===== */
+    .anno-add {
+      background: rgba(124, 154, 142, 0.12);
+      border-left: 2.5px solid #7C9A8E;
+      padding: 1px 4px;
+      border-radius: 0 3px 3px 0;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .anno-add:hover { background: rgba(124, 154, 142, 0.22); }
+
+    .anno-del {
+      background: rgba(199, 80, 80, 0.06);
+      text-decoration: line-through;
+      text-decoration-color: rgba(199, 80, 80, 0.5);
+      padding: 1px 4px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .anno-del:hover { background: rgba(199, 80, 80, 0.12); }
+
+    /* ===== 高亮联动 ===== */
+    .anno-linked {
+      outline: 2px solid #1A1A1A;
+      outline-offset: 1px;
+      border-radius: 3px;
+    }
+
+    /* ===== 批注卡片 ===== */
+    .anno-tooltip {
+      position: fixed;
+      z-index: 100;
+      background: #FFFFFF;
+      border: 1px solid #E8E4DE;
+      border-radius: 14px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.05);
+      padding: 16px 18px;
+      width: 280px;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      pointer-events: none;
+    }
+    .anno-tooltip.show {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .anno-tooltip::before {
+      content: '';
+      position: absolute;
+      top: -6px;
+      left: 24px;
+      width: 12px;
+      height: 12px;
+      background: #FFFFFF;
+      border-left: 1px solid #E8E4DE;
+      border-top: 1px solid #E8E4DE;
+      transform: rotate(45deg);
+    }
+
+    /* ===== 类型标签色 ===== */
+    .type-emotion { background: rgba(124,154,142,0.12); color: #5A7A6C; }
+    .type-rhythm { background: rgba(107,143,181,0.12); color: #4A6F8F; }
+    .type-dialog { background: rgba(212,165,116,0.15); color: #B8865A; }
+    .type-style { background: rgba(155,142,196,0.12); color: #7B6BA4; }
+
+    /* ===== 中间分隔线 ===== */
+    .divider-line {
+      width: 1px;
+      background: linear-gradient(to bottom, transparent, #E8E4DE 10%, #E8E4DE 90%, transparent);
+    }
+    @media (max-width: 767px) {
+      .divider-line {
+        width: 100%;
+        height: 1px;
+        background: linear-gradient(to right, transparent, #E8E4DE 10%, #E8E4DE 90%, transparent);
+      }
+    }
+
+    /* ===== 水平条形图 ===== */
+    .bar-track { height: 10px; background: #F5F0E8; border-radius: 5px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 5px; transition: width 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+
+    /* ===== 统计徽章动画 ===== */
+    @keyframes badge-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .badge-in { animation: badge-in 0.5s ease forwards; }
+
+    /* ===== 按钮 ===== */
+    .btn-primary {
+      background: #1A1A1A; color: white; transition: all 0.3s ease;
+      position: relative; overflow: hidden;
+    }
+    .btn-primary::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, #D4A574, #B8865A);
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .btn-primary:hover::after { opacity: 1; }
+    .btn-primary span { position: relative; z-index: 1; }
+
+    .btn-ghost { border: 1.5px solid #E8E4DE; color: #1A1A1A; transition: all 0.3s ease; }
+    .btn-ghost:hover { border-color: #1A1A1A; background: #1A1A1A; color: white; }
+
+    /* ===== 滚动条 ===== */
+    .custom-scroll::-webkit-scrollbar { width: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #E8E4DE; border-radius: 2px; }
+
+    /* ===== 淡入 ===== */
+    .fade-up { opacity: 0; transform: translateY(30px); transition: opacity 0.7s ease, transform 0.7s ease; }
+    .fade-up.visible { opacity: 1; transform: translateY(0); }
+
+    /* ===== 页面加载 ===== */
+    @keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
+    body { animation: page-in 0.5s ease; }
+  </style>
+</head>
+
+<body x-data="reviewApp()" x-init="init()">
+
+  <!-- ==================== 全局批注卡片 ==================== -->
+  <div class="anno-tooltip" :class="{ show: tip.show }"
+       :style="'left:' + tip.x + 'px;top:' + tip.y + 'px;'">
+    <div class="flex items-center justify-between mb-2.5">
+      <span class="text-[11px] font-medium px-2.5 py-1 rounded-full"
+            :class="tip.typeClass" x-text="tip.typeLabel"></span>
+      <span class="text-[10px] text-warmgray-400" x-text="'#' + tip.id"></span>
+    </div>
+    <p class="text-xs leading-relaxed text-warmgray-600 mb-3" x-text="tip.reason"></p>
+    <div class="flex items-center gap-1.5 pt-2.5 border-t border-warmgray-200">
+      <div class="w-4 h-4 rounded-full flex items-center justify-center" :style="'background:' + tip.agentColor">
+        <span class="text-[7px] text-white font-bold" x-text="tip.agentIcon"></span>
+      </div>
+      <span class="text-[10px] text-warmgray-400" x-text="tip.agent"></span>
+    </div>
+  </div>
+
+  <!-- ==================== 导航栏 ==================== -->
+  <nav class="nav-blur fixed top-0 left-0 right-0 z-50 border-b border-warmgray-200/50">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-nearblack flex items-center justify-center">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 2L12 8L4 14V2Z" fill="white" opacity="0.9"/>
+            <circle cx="4" cy="2" r="1.5" fill="#D4A574"/>
+          </svg>
+        </div>
+        <span class="font-serif font-semibold text-nearblack text-lg tracking-tight">NovelSoul</span>
+      </a>
+      <div class="hidden md:flex items-center gap-8">
+        <a href="diagnose.html" class="text-sm text-warmgray-500 hover:text-nearblack transition-colors">文本诊断</a>
+        <a href="refine.html" class="text-sm text-warmgray-500 hover:text-nearblack transition-colors">Agent润色</a>
+        <a href="emotion.html" class="text-sm text-warmgray-500 hover:text-nearblack transition-colors">情感曲线</a>
+        <a href="review.html" class="text-sm text-nearblack font-medium">对比审稿</a>
+      </div>
+      <a href="diagnose.html" class="btn-primary px-5 py-2 rounded-full text-sm font-medium">
+        <span>开始使用</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ==================== 主内容 ==================== -->
+  <main class="pt-16 min-h-screen">
+    <div class="max-w-6xl mx-auto px-6 pt-12 pb-6">
+      <a href="index.html" class="inline-flex items-center gap-1.5 text-xs text-warmgray-400 hover:text-warmgray-500 transition-colors mb-6">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7L9 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        返回首页
+      </a>
+      <h1 class="font-serif text-3xl md:text-4xl font-bold text-nearblack mb-3">对比审稿台</h1>
+      <p class="text-warmgray-500 text-base">每一处修改都有原因 —— 悬浮标记查看编辑批注</p>
+    </div>
+
+    <!-- ==================== 指标条 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 mb-8">
+      <div class="bg-nearblack rounded-2xl px-6 py-5 flex flex-wrap items-center gap-x-8 gap-y-3"
+           x-data="{ shown: false }" x-intersect.once="shown = true">
+        <div class="flex items-center gap-2.5 badge-in" :style="'animation-delay:0.1s'">
+          <span class="text-warmgray-500 text-lg">📝</span>
+          <div>
+            <p class="text-[10px] text-warmgray-500 uppercase tracking-wider">修改处数</p>
+            <p class="text-white font-bold text-lg leading-tight">12 处</p>
+          </div>
+        </div>
+        <div class="w-px h-8 bg-white/10 hidden sm:block"></div>
+        <div class="flex items-center gap-2.5 badge-in" :style="'animation-delay:0.2s'">
+          <span class="text-lg">➕</span>
+          <div>
+            <p class="text-[10px] text-warmgray-500 uppercase tracking-wider">新增</p>
+            <p class="text-moss font-bold text-lg leading-tight">7 处 <span class="text-sm font-normal text-moss-light">/ 52字</span></p>
+          </div>
+        </div>
+        <div class="w-px h-8 bg-white/10 hidden sm:block"></div>
+        <div class="flex items-center gap-2.5 badge-in" :style="'animation-delay:0.3s'">
+          <span class="text-lg">➖</span>
+          <div>
+            <p class="text-[10px] text-warmgray-500 uppercase tracking-wider">删除</p>
+            <p class="text-danger font-bold text-lg leading-tight">5 处 <span class="text-sm font-normal text-danger-light">/ 56字</span></p>
+          </div>
+        </div>
+        <div class="w-px h-8 bg-white/10 hidden sm:block"></div>
+        <div class="flex items-center gap-2.5 badge-in" :style="'animation-delay:0.4s'">
+          <span class="text-lg">📈</span>
+          <div>
+            <p class="text-[10px] text-warmgray-500 uppercase tracking-wider">综合改善度</p>
+            <p class="text-caramel font-bold text-lg leading-tight">+68%</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 并排对比区 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 mb-10">
+      <!-- 图例 -->
+      <div class="flex flex-wrap items-center gap-5 mb-5 text-xs text-warmgray-500">
+        <div class="flex items-center gap-2">
+          <span class="inline-block w-8 h-4 rounded bg-moss/15 border-l-[2.5px] border-moss"></span>
+          <span>新增内容</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="inline-block w-8 h-4 rounded bg-danger-light line-through text-danger text-[10px] flex items-center justify-center" style="text-decoration-color:rgba(199,80,80,0.5)">删</span>
+          <span>删除内容</span>
+        </div>
+        <div class="flex items-center gap-2 text-warmgray-400">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1"/>
+            <path d="M6 3.5V6L7.5 7" stroke="currentColor" stroke-width="0.8" stroke-linecap="round"/>
+          </svg>
+          <span>悬浮标记查看批注</span>
+        </div>
+      </div>
+
+      <!-- 双栏 -->
+      <div class="flex flex-col md:flex-row gap-0 bg-warmwhite rounded-2xl border border-warmgray-200 overflow-hidden">
+
+        <!-- 左栏：原始文本 -->
+        <div class="flex-1 min-w-0">
+          <div class="px-5 md:px-6 py-3.5 border-b border-warmgray-200 flex items-center gap-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-warmgray-300"></div>
+            <span class="text-xs font-medium text-warmgray-500">原始文本</span>
+            <span class="text-[10px] text-warmgray-400 ml-auto" x-text="originalLen + ' 字'"></span>
+          </div>
+          <div class="p-5 md:p-6 custom-scroll max-h-[560px] overflow-y-auto">
+            <p class="font-novel text-sm leading-[2.4] text-warmgray-500">
+              <span data-anno="1" class="anno-del"
+                @mouseenter="showAnno(1, $event)" @mouseleave="hideAnno()">李明走进办公室，看到张伟坐在座位上。</span><span data-anno="3" class="anno-del"
+                @mouseenter="showAnno(3, $event)" @mouseleave="hideAnno()">李明觉得很生气，因为张伟昨天答应了要交报告但是没有交。</span><span data-anno="6" class="anno-del"
+                @mouseenter="showAnno(6, $event)" @mouseleave="hideAnno()">李明走到张伟面前说："你昨天说好要交报告的，为什么没交？"</span><span data-anno="8" class="anno-del"
+                @mouseenter="showAnno(8, $event)" @mouseleave="hideAnno()">张伟觉得很不好意思，他说："对不起，我昨天太忙了忘记了这个事情。"</span><span data-anno="10" class="anno-del"
+                @mouseenter="showAnno(10, $event)" @mouseleave="hideAnno()">李明说："这不行，你需要今天之内交给我。"张伟说："好的，我今天就交。"</span><span data-anno="12" class="anno-del"
+                @mouseenter="showAnno(12, $event)" @mouseleave="hideAnno()">然后李明就回到了自己的座位上开始工作。</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- 分隔线 -->
+        <div class="divider-line flex-shrink-0"></div>
+
+        <!-- 右栏：润色后 -->
+        <div class="flex-1 min-w-0">
+          <div class="px-5 md:px-6 py-3.5 border-b border-warmgray-200 flex items-center gap-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-caramel"></div>
+            <span class="text-xs font-medium text-caramel-dark">灵韵润色后</span>
+            <span class="text-[10px] text-warmgray-400 ml-auto" x-text="refinedLen + ' 字'"></span>
+          </div>
+          <div class="p-5 md:p-6 custom-scroll max-h-[560px] overflow-y-auto">
+            <p class="font-novel text-sm leading-[2.4] text-nearblack">
+              <span data-anno="1" class="anno-add"
+                @mouseenter="showAnno(1, $event)" @mouseleave="hideAnno()">李明走进办公室的时候，张伟正坐在那里。</span><span data-anno="2" class="anno-add"
+                @mouseenter="showAnno(2, $event)" @mouseleave="hideAnno()">张伟看着面前的电脑，电脑没有开。</span><span data-anno="4" class="anno-add"
+                @mouseenter="showAnno(4, $event)" @mouseleave="hideAnno()">李明站住了。</span><span data-anno="5" class="anno-add"
+                @mouseenter="showAnno(5, $event)" @mouseleave="hideAnno()">手指攥得很紧，像是攥着什么不想放开的东西。</span><span data-anno="6" class="anno-add"
+                @mouseenter="showAnno(6, $event)" @mouseleave="hideAnno()">"报告。"李明说。</span><span data-anno="7" class="anno-add"
+                @mouseenter="showAnno(7, $event)" @mouseleave="hideAnno()">张伟没有动。</span><span data-anno="9" class="anno-add"
+                @mouseenter="showAnno(9, $event)" @mouseleave="hideAnno()">过了很久，也许只有几秒钟，</span><span data-anno="10" class="anno-add"
+                @mouseenter="showAnno(10, $event)" @mouseleave="hideAnno()">张伟说："今天。"</span><span data-anno="11" class="anno-add"
+                @mouseenter="showAnno(11, $event)" @mouseleave="hideAnno()">李明看了他一会儿。</span><span data-anno="12" class="anno-add"
+                @mouseenter="showAnno(12, $event)" @mouseleave="hideAnno()">转身走了。</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 修改类型统计 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 mb-10 fade-up">
+      <h3 class="text-sm font-semibold text-nearblack mb-5 flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="10" width="3" height="5" rx="1" fill="#7C9A8E"/>
+          <rect x="5.5" y="7" width="3" height="8" rx="1" fill="#D4A574"/>
+          <rect x="10" y="4" width="3" height="11" rx="1" fill="#6B8FB5"/>
+        </svg>
+        修改类型分布
+      </h3>
+
+      <div class="bg-warmwhite rounded-2xl border border-warmgray-200 p-6 space-y-5">
+        <!-- 新增情感描写 -->
+        <div class="flex items-center gap-4">
+          <div class="w-28 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-moss"></span>
+              <span class="text-xs font-medium text-nearblack">新增情感描写</span>
+            </div>
+          </div>
+          <div class="flex-1">
+            <div class="bar-track">
+              <div class="bar-fill" :style="'width:' + barAnimated ? '41.7' : '0' + '%;background:#7C9A8E;'"></div>
+            </div>
+          </div>
+          <div class="w-24 text-right flex-shrink-0">
+            <span class="text-sm font-bold text-nearblack">5 处</span>
+            <span class="text-xs text-warmgray-400 ml-1">41.7%</span>
+          </div>
+        </div>
+
+        <!-- 节奏调整 -->
+        <div class="flex items-center gap-4">
+          <div class="w-28 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-rhythm"></span>
+              <span class="text-xs font-medium text-nearblack">节奏调整</span>
+            </div>
+          </div>
+          <div class="flex-1">
+            <div class="bar-track">
+              <div class="bar-fill" :style="'width:' + barAnimated ? '25' : '0' + '%;background:#6B8FB5;'"></div>
+            </div>
+          </div>
+          <div class="w-24 text-right flex-shrink-0">
+            <span class="text-sm font-bold text-nearblack">3 处</span>
+            <span class="text-xs text-warmgray-400 ml-1">25.0%</span>
+          </div>
+        </div>
+
+        <!-- 对话重写 -->
+        <div class="flex items-center gap-4">
+          <div class="w-28 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-caramel"></span>
+              <span class="text-xs font-medium text-nearblack">对话重写</span>
+            </div>
+          </div>
+          <div class="flex-1">
+            <div class="bar-track">
+              <div class="bar-fill" :style="'width:' + barAnimated ? '25' : '0' + '%;background:#D4A574;'"></div>
+            </div>
+          </div>
+          <div class="w-24 text-right flex-shrink-0">
+            <span class="text-sm font-bold text-nearblack">3 处</span>
+            <span class="text-xs text-warmgray-400 ml-1">25.0%</span>
+          </div>
+        </div>
+
+        <!-- 风格统一 -->
+        <div class="flex items-center gap-4">
+          <div class="w-28 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-style_p"></span>
+              <span class="text-xs font-medium text-nearblack">风格统一</span>
+            </div>
+          </div>
+          <div class="flex-1">
+            <div class="bar-track">
+              <div class="bar-fill" :style="'width:' + barAnimated ? '8.3' : '0' + '%;background:#9B8EC4;'"></div>
+            </div>
+          </div>
+          <div class="w-24 text-right flex-shrink-0">
+            <span class="text-sm font-bold text-nearblack">1 处</span>
+            <span class="text-xs text-warmgray-400 ml-1">8.3%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 审稿结论 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 mb-10 fade-up">
+      <h3 class="text-sm font-semibold text-nearblack mb-5 flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M8 2L10 6.5L15 7.5L11 11.5L12 17L8 14.5L4 17L5 11.5L1 7.5L6 6.5L8 2Z" stroke="#D4A574" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        主编审稿意见
+      </h3>
+
+      <div class="bg-warmwhite rounded-2xl border border-warmgray-200 p-6 md:p-8">
+        <div class="flex items-start gap-4 mb-6">
+          <div class="w-10 h-10 rounded-xl bg-nearblack flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M9 2L11 7H16.5L12 10.5L13.5 16L9 13L4.5 16L6 10.5L1.5 7H7L9 2Z" stroke="#D4A574" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <p class="text-xs text-warmgray-400 mb-2">审稿结论</p>
+            <p class="text-sm leading-[2] text-warmgray-600">
+              该文本经四阶段Agent协作润色后，情感表达从<span class="text-nearblack font-medium">"陈述型"转变为"展现型"</span>，对话从<span class="text-nearblack font-medium">"信息传递型"转变为"潜台词型"</span>，叙事节奏从<span class="text-nearblack font-medium">"匀速推进"转变为"长短交替"</span>。全文从128字精简至98字，信息密度提升31%，文学质感显著提升。
+            </p>
+            <p class="text-sm leading-[2] text-warmgray-600 mt-2">
+              建议：当前润色结果已达到"余华·冷峻"风格标准，可进入终稿流程。如需调整风格，可返回Agent润色页切换目标作家模板。
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 pt-5 border-t border-warmgray-200">
+          <div class="w-5 h-5 rounded-full bg-caramel/15 flex items-center justify-center">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M5 1L6.2 3.8L9 4.2L7 6.2L7.5 9L5 7.8L2.5 9L3 6.2L1 4.2L3.8 3.8L5 1Z" fill="#D4A574"/>
+            </svg>
+          </div>
+          <span class="text-xs text-warmgray-400">NovelSoul 主编Agent</span>
+          <span class="text-xs text-warmgray-300 ml-2">·</span>
+          <span class="text-xs text-warmgray-300 ml-2">审稿通过</span>
+          <span class="ml-auto text-xs text-success font-medium px-2.5 py-1 rounded-full bg-success-light">APPROVED</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 行动按钮 ==================== -->
+    <div class="max-w-6xl mx-auto px-6 pb-20 fade-up">
+      <div class="flex flex-wrap gap-4 justify-center">
+        <a href="refine.html" class="btn-primary px-7 py-3 rounded-full text-sm font-medium inline-flex items-center gap-2">
+          <span class="flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <rect x="1.5" y="1.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="7.5" y="1.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="1.5" y="7.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+              <rect x="7.5" y="7.5" width="5" height="5" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+            </svg>
+            重新润色
+          </span>
+        </a>
+        <a href="emotion.html" class="btn-ghost px-7 py-3 rounded-full text-sm font-medium inline-flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <polyline points="1,10 3.5,6 6,7.5 9,3 13,5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          查看情感曲线
+        </a>
+        <a href="index.html" class="btn-ghost px-7 py-3 rounded-full text-sm font-medium inline-flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 3L5 7L9 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          返回首页
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== 底部 ==================== -->
+  <footer class="border-t border-warmgray-200 py-8">
+    <div class="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <div class="w-5 h-5 rounded-md bg-nearblack flex items-center justify-center">
+          <svg width="8" height="8" viewBox="0 0 16 16" fill="none"><path d="M4 2L12 8L4 14V2Z" fill="white" opacity="0.9"/></svg>
+        </div>
+        <span class="font-serif font-semibold text-nearblack text-xs">NovelSoul AI</span>
+      </div>
+      <p class="text-[11px] text-warmgray-400">Powered by Multi-Agent AI · Long-Chain Reasoning</p>
+    </div>
+  </footer>
+
+  <!-- ==================== JavaScript ==================== -->
+  <script>
+    function reviewApp() {
+      return {
+        originalLen: 128,
+        refinedLen: 98,
+        barAnimated: false,
+        linkedId: -1,
+
+        // 批注Tooltip状态
+        tip: { show: false, x: 0, y: 0, id: 0, typeLabel: '', typeClass: '', reason: '', agent: '', agentIcon: '', agentColor: '' },
+
+        // 12处批注数据
+        annotations: {
+          1: {
+            typeLabel: '风格统一', typeClass: 'type-style',
+            reason: '将"看到"改为"的时候……正坐在"，引入余华式时间从句，降低叙述速度，制造凝视感。',
+            agent: '风格润色师', agentIcon: '风', agentColor: '#9B8EC4',
+          },
+          2: {
+            typeLabel: '新增情感描写', typeClass: 'type-emotion',
+            reason: '新增独立环境细节句，用"电脑没有开"暗示异常氛围，替代直白的情感陈述。读者从环境推断情绪。',
+            agent: '情感分析师', agentIcon: '情', agentColor: '#7C9A8E',
+          },
+          3: {
+            typeLabel: '删除直白陈述', typeClass: 'type-emotion',
+            reason: '删除"觉得很生气"的直接情感陈述。好的文学不告诉读者"他生气了"，而是让读者自己感受到。',
+            agent: '情感分析师', agentIcon: '情', agentColor: '#7C9A8E',
+          },
+          4: {
+            typeLabel: '节奏调整', typeClass: 'type-rhythm',
+            reason: '新增三字短句"李明站住了。"作为节奏断点，让读者在连续叙述中突然停顿，感受角色的犹豫。',
+            agent: '节奏控制师', agentIcon: '节', agentColor: '#6B8FB5',
+          },
+          5: {
+            typeLabel: '新增情感描写', typeClass: 'type-emotion',
+            reason: '用"攥紧"的身体动作和"像是攥着什么不想放开的东西"的比喻，替代"很生气"三个字。从身体推断心理。',
+            agent: '情感分析师', agentIcon: '情', agentColor: '#7C9A8E',
+          },
+          6: {
+            typeLabel: '对话重写', typeClass: 'type-dialog',
+            reason: '将24字的直白质问缩减为2字的"报告。"——越短的对话越有力量。删掉所有解释，只留下核心词。',
+            agent: '对话导演', agentIcon: '话', agentColor: '#D4A574',
+          },
+          7: {
+            typeLabel: '节奏调整', typeClass: 'type-rhythm',
+            reason: '"张伟没有动。"——五字独立成段。沉默比任何回应都有力量。这是全文节奏最重的一个断点。',
+            agent: '节奏控制师', agentIcon: '节', agentColor: '#6B8FB5',
+          },
+          8: {
+            typeLabel: '对话重写', typeClass: 'type-dialog',
+            reason: '删除"觉得很不好意思"和整段解释性对话。真实的尴尬不需要道歉和解释，沉默和回避才是本能反应。',
+            agent: '对话导演', agentIcon: '话', agentColor: '#D4A574',
+          },
+          9: {
+            typeLabel: '节奏调整', typeClass: 'type-rhythm',
+            reason: '"过了很久，也许只有几秒钟，"——时间感知的主观化处理。"也许只有"四个字制造张力：紧张时一秒如一年。',
+            agent: '节奏控制师', agentIcon: '节', agentColor: '#6B8FB5',
+          },
+          10: {
+            typeLabel: '对话重写', typeClass: 'type-dialog',
+            reason: '删除全部bargaining对话（"这不行""你需要""好的我今天就交"），只保留张伟一个词的回应"今天。"留白暗示复杂心理。',
+            agent: '对话导演', agentIcon: '话', agentColor: '#D4A574',
+          },
+          11: {
+            typeLabel: '新增情感描写', typeClass: 'type-emotion',
+            reason: '"李明看了他一会儿。"——新增观察动作，暗示李明内心的某种判断或释然。不写心理活动，只写眼睛的动作。',
+            agent: '情感分析师', agentIcon: '情', agentColor: '#7C9A8E',
+          },
+          12: {
+            typeLabel: '风格统一', typeClass: 'type-style',
+            reason: '将28字的叙事句缩减为4字"转身走了。"删除"然后""就"等口语连接词，用极简句收束全文——这是余华标志性的结尾方式。',
+            agent: '风格润色师', agentIcon: '风', agentColor: '#9B8EC4',
+          },
+        },
+
+        init() {
+          // 滚动渐入 + 条形图动画
+          const obs = new IntersectionObserver((entries) => {
+            entries.forEach(e => {
+              if (e.isIntersecting) {
+                e.target.classList.add('visible');
+                if (e.target.querySelector('.bar-track')) {
+                  this.barAnimated = true;
+                }
+              }
+            });
+          }, { threshold: 0.15 });
+          document.querySelectorAll('.fade-up').forEach(el => obs.observe(el));
+        },
+
+        showAnno(id, event) {
+          const anno = this.annotations[id];
+          if (!anno) return;
+
+          // 高亮左右栏的对应标记
+          this.linkedId = id;
+          document.querySelectorAll(`[data-anno="${id}"]`).forEach(el => {
+            el.classList.add('anno-linked');
+          });
+
+          // 计算tooltip位置
+          const rect = event.target.getBoundingClientRect();
+          let x = rect.left;
+          let y = rect.bottom + 10;
+
+          // 防止超出右侧
+          if (x + 280 > window.innerWidth) {
+            x = window.innerWidth - 290;
+          }
+          // 防止超出底部
+          if (y + 160 > window.innerHeight) {
+            y = rect.top - 170;
+          }
+
+          this.tip = {
+            show: true,
+            x: x,
+            y: y,
+            id: id,
+            typeLabel: anno.typeLabel,
+            typeClass: anno.typeClass,
+            reason: anno.reason,
+            agent: anno.agent,
+            agentIcon: anno.agentIcon,
+            agentColor: anno.agentColor,
+          };
+        },
+
+        hideAnno() {
+          // 清除高亮
+          if (this.linkedId > 0) {
+            document.querySelectorAll(`[data-anno="${this.linkedId}"]`).forEach(el => {
+              el.classList.remove('anno-linked');
+            });
+          }
+          this.linkedId = -1;
+          this.tip.show = false;
+        },
+      };
+    }
+  </script>
+</body>
+</html>
