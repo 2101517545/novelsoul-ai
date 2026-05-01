@@ -45,7 +45,7 @@ Multi-Agent Collaborative Novel Humanizer
 
 1.  克隆仓库：
     ```bash
-    git clone https://github.com/foreverida/novelsoul-ai.git
+    git clone https://github.com/2101517545/novelsoul-ai.git
     ```
 2.  打开 `index.html`
 3.  点击"开始诊断"体验完整流程
